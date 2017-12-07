@@ -1,21 +1,32 @@
 # Swagger UI
 
-[![NPM version](https://badge.fury.io/js/swagger-ui.svg)](http://badge.fury.io/js/swagger-ui)
+This is a brandable version of Swagger UI that is assumed to be hosted with the correct protcol (HTTP/HTTPS is inferred).
 
-## New!
+## Getting Started
 
-**This is the new version of swagger-ui, 3.x. Want to learn more? Check out our [FAQ](http://swagger.io/new-ui-faq/).**
+This project requires Node 6.  Check this with `node -v`.  Our other products with Node 4. We use nvm to manage both node versions in parallel.
 
-**👉🏼 Want to score an easy open-source contribution?** Check out our [Good first issue](https://github.com/swagger-api/swagger-ui/issues?q=is%3Aissue+is%3Aopen+label%3A%22Good+first+issue%22) label.
+ - Install nvm.  Instructions are here: `https://github.com/creationix/nvm`
+ - `nvm install v6.10.3`
+ - `nvm use v6.10.3`
+ - When you are done, check your node versions with `nvm ls` and switch back to your Node 4 version.  `nvm use v4.8.3`
 
-As a brand new version, written from the ground up, there are some known issues and unimplemented features. Check out the [Known Issues](#known-issues) section for more details.
+ - Clone this repository
+ - Make your changes
+ - Build with `npm run build`
+ - Test by moving a copy of orchid_swagger.yaml in the dist directory and running http-server in the dist directory.
 
-This repository publishes to two different NPM modules:
+## Branding
 
-* [swagger-ui](https://www.npmjs.com/package/swagger-ui) is a traditional npm module intended for use in JavaScript web application projects that are capable of resolving dependencies (via Webpack, Browserify, etc).
-* [swagger-ui-dist](https://www.npmjs.com/package/swagger-ui-dist) is a dependency-free module that includes everything you need to serve Swagger-UI in a server-side project, or a web project that can't resolve npm module dependencies.
+ While building a parent app, replace these strings with whatever you like for branding:
 
-For the older version of swagger-ui, refer to the [*2.x branch*](https://github.com/swagger-api/swagger-ui/tree/2.x).
+ - "@@APP_NAME@@" 🡺 "My Cool VMS"
+ - "color: orchid" 🡺 "color: #bada55"
+
+Add the folloowing branded assets:
+
+ - dist/logo_small.png
+ - dist/favicon.png
 
 ## Compatibility
 The OpenAPI Specification has undergone 5 revisions since initial creation in 2010.  Compatibility between swagger-ui and the OpenAPI Specification is as follows:
