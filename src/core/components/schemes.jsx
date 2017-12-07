@@ -15,7 +15,7 @@ export default class Schemes extends React.Component {
     let { schemes } = this.props
 
     //fire 'change' event to set default 'value' of select
-    this.setScheme(schemes.first())
+    this.setScheme(window.location.protocol.substring(0, window.location.protocol.length - 1))
   }
 
   componentWillReceiveProps(nextProps) {
@@ -39,15 +39,6 @@ export default class Schemes extends React.Component {
   render() {
     let { schemes } = this.props
 
-    return (
-      <label htmlFor="schemes">
-        <span className="schemes-title">Schemes</span>
-        <select onChange={ this.onChange }>
-          { schemes.valueSeq().map(
-            ( scheme ) => <option value={ scheme } key={ scheme }>{ scheme }</option>
-          ).toArray()}
-        </select>
-      </label>
-    )
+    return <div></div>
   }
 }
