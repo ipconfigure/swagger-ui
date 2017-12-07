@@ -2,7 +2,6 @@ import React, { cloneElement } from "react"
 import PropTypes from "prop-types"
 
 //import "./topbar.less"
-import Logo from "./logo_small.png"
 
 export default class Topbar extends React.Component {
 
@@ -130,7 +129,7 @@ export default class Topbar extends React.Component {
         <div className="wrapper">
           <div className="topbar-wrapper">
             <Link href="/" title="@@APP_NAME@@ API">
-              <img height="36" width="36" src={ Logo } alt="@@APP_NAME@@ API" />
+              <img height="36" width="36" src="./logo_small.png" alt="@@APP_NAME@@ API" />
               <span>@@APP_NAME@@</span>
             </Link>
           </div>
