@@ -11,7 +11,12 @@ This project requires Node 6.  Check this with `node -v`.  Our other products wi
  - `nvm use v6.10.3`
  - When you are done, check your node versions with `nvm ls` and switch back to your Node 4 version.  `nvm use v4.8.3`
 
+Now for the obvious bit:
+
  - Clone this repository
+
+Workflow looks like this:
+
  - Make your changes
  - Build with `npm run build`
  - Test by moving a copy of orchid_swagger.yaml in the dist directory and running http-server in the dist directory.
