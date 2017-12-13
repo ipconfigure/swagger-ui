@@ -95,11 +95,6 @@ class ValidatorImage extends React.Component {
   }
 
   render() {
-    if (this.state.error) {
-      return <img alt={"Error"} />
-    } else if (!this.state.loaded) {
-      return <img alt= {"Loading..."} />
-    }
-    return <img src={this.props.src} alt={this.props.alt} />
+    return <div></div>
   }
 }
