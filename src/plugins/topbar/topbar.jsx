@@ -2,7 +2,6 @@ import React, { cloneElement } from "react"
 import PropTypes from "prop-types"
 
 //import "./topbar.less"
-import Logo from "./logo_small.png"
 
 export default class Topbar extends React.Component {
 
@@ -129,13 +128,10 @@ export default class Topbar extends React.Component {
       <div className="topbar">
         <div className="wrapper">
           <div className="topbar-wrapper">
-            <Link href="#">
-              <img height="30" width="30" src={ Logo } alt="Swagger UI"/>
-              <span>swagger</span>
+            <Link href="/" title="@@APP_NAME@@ API">
+              <img height="36" width="36" src="./logo_small.png" alt="@@APP_NAME@@ API" />
+              <span>Orchid</span>
             </Link>
-            <form className="download-url-wrapper" onSubmit={formOnSubmit}>
-              {control.map((el, i) => cloneElement(el, { key: i }))}
-            </form>
           </div>
         </div>
       </div>
