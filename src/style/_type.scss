@@ -1,3 +1,14 @@
+// Browsers do not correctly handle "section h1, section h2, section h3" font sizes
+h1 {
+    font-size: 2em;
+}
+h2 {
+    font-size: 1.5em;
+}
+h3 {
+    font-size: 1.1em;
+}
+
 @mixin text_body($color: $text-body-default-font-color)
 {
     font-family: 'Open Sans', sans-serif;
