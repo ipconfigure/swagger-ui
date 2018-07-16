@@ -1,3 +1,4 @@
+import parseUrl from "url-parse"
 import win from "core/window"
 import { btoa, buildFormData } from "core/utils"
 
@@ -73,7 +74,7 @@ export const authorizePassword = ( auth ) => ( { authActions } ) => {
   let { schema, name, username, password, passwordType, clientId, clientSecret } = auth
   let form = {
     grant_type: "password",
-    scopes: encodeURIComponent(auth.scopes.join(scopeSeparator))
+    scope: auth.scopes.join(scopeSeparator)
   }
   let query = {}
   let headers = {}
@@ -111,7 +112,7 @@ export const authorizeApplication = ( auth ) => ( { authActions } ) => {
   return authActions.authorizeRequest({body: buildFormData(form), name, url: schema.get("tokenUrl"), auth, headers })
 }
 
-export const authorizeAccessCode = ( { auth, redirectUrl } ) => ( { authActions } ) => {
+export const authorizeAccessCodeWithFormParams = ( { auth, redirectUrl } ) => ( { authActions } ) => {
   let { schema, name, clientId, clientSecret } = auth
   let form = {
     grant_type: "authorization_code",
@@ -124,18 +125,42 @@ export const authorizeAccessCode = ( { auth, redirectUrl } ) => ( { authActions 
   return authActions.authorizeRequest({body: buildFormData(form), name, url: schema.get("tokenUrl"), auth})
 }
 
-export const authorizeRequest = ( data ) => ( { fn, authActions, errActions, authSelectors } ) => {
-  let { body, query={}, headers={}, name, url, auth } = data
-  let { additionalQueryStringParams } = authSelectors.getConfigs() || {}
-  let fetchUrl = url
-
-  for (let key in additionalQueryStringParams) {
-    url += "&" + key + "=" + encodeURIComponent(additionalQueryStringParams[key])
+export const authorizeAccessCodeWithBasicAuthentication = ( { auth, redirectUrl } ) => ( { authActions } ) => {
+  let { schema, name, clientId, clientSecret } = auth
+  let headers = {
+    Authorization: "Basic " + btoa(clientId + ":" + clientSecret)
   }
+  let form = {
+    grant_type: "authorization_code",
+    code: auth.code,
+    client_id: clientId,
+    redirect_uri: redirectUrl
+  }
+
+  return authActions.authorizeRequest({body: buildFormData(form), name, url: schema.get("tokenUrl"), auth, headers})
+}
+
+export const authorizeRequest = ( data ) => ( { fn, getConfigs, authActions, errActions, oas3Selectors, specSelectors, authSelectors } ) => {
+  let { body, query={}, headers={}, name, url, auth } = data
+
+  let { additionalQueryStringParams } = authSelectors.getConfigs() || {}
+
+  let parsedUrl
+
+  if (specSelectors.isOAS3()) {
+    parsedUrl = parseUrl(url, oas3Selectors.selectedServer(), true)
+  } else {
+    parsedUrl = parseUrl(url, specSelectors.url(), true)
+  }
+
+  if(typeof additionalQueryStringParams === "object") {
+    parsedUrl.query = Object.assign({}, parsedUrl.query, additionalQueryStringParams)
+  }
+
+  const fetchUrl = parsedUrl.toString()
 
   let _headers = Object.assign({
     "Accept":"application/json, text/plain, */*",
-    "Access-Control-Allow-Origin": "*",
     "Content-Type": "application/x-www-form-urlencoded"
   }, headers)
 
@@ -144,7 +169,9 @@ export const authorizeRequest = ( data ) => ( { fn, authActions, errActions, aut
     method: "post",
     headers: _headers,
     query: query,
-    body: body
+    body: body,
+    requestInterceptor: getConfigs().requestInterceptor,
+    responseInterceptor: getConfigs().responseInterceptor
   })
   .then(function (response) {
     let token = JSON.parse(response.data)

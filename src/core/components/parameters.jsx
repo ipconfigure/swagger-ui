@@ -1,4 +1,5 @@
-import React, { Component, PropTypes } from "react"
+import React, { Component } from "react"
+import PropTypes from "prop-types"
 import ImPropTypes from "react-immutable-proptypes"
 import Im from "immutable"
 
@@ -18,7 +19,9 @@ export default class Parameters extends Component {
     onTryoutClick: PropTypes.func,
     onCancelClick: PropTypes.func,
     onChangeKey: PropTypes.array,
-    pathMethod: PropTypes.array.isRequired
+    pathMethod: PropTypes.array.isRequired,
+    getConfigs: PropTypes.func.isRequired,
+    specPath: ImPropTypes.list.isRequired,
   }
 
 
@@ -28,15 +31,16 @@ export default class Parameters extends Component {
     tryItOutEnabled: false,
     allowTryItOut: true,
     onChangeKey: [],
+    specPath: [],
   }
 
   onChange = ( param, value, isXml ) => {
     let {
-      specActions: { changeParam },
+      specActions: { changeParamByIdentity },
       onChangeKey,
     } = this.props
 
-    changeParam( onChangeKey, param.get("name"), value, isXml)
+    changeParamByIdentity(onChangeKey, param, value, isXml)
   }
 
   onChangeConsumesWrapper = ( val ) => {
@@ -56,9 +60,11 @@ export default class Parameters extends Component {
       parameters,
       allowTryItOut,
       tryItOutEnabled,
+      specPath,
 
       fn,
       getComponent,
+      getConfigs,
       specSelectors,
       pathMethod
     } = this.props
@@ -71,7 +77,9 @@ export default class Parameters extends Component {
     return (
       <div className="opblock-section">
         <div className="opblock-section-header">
-          <h4 className="opblock-title">Parameters</h4>
+          <div className="tab-header">
+            <h4 className="opblock-title">Parameters</h4>
+          </div>
             { allowTryItOut ? (
               <TryItOutButton enabled={ tryItOutEnabled } onCancelClick={ onCancelClick } onTryoutClick={ onTryoutClick } />
             ) : null }
@@ -87,11 +95,15 @@ export default class Parameters extends Component {
               </thead>
               <tbody>
                 {
-                  eachMap(parameters, (parameter) => (
-                    <ParameterRow fn={ fn }
+                  eachMap(parameters, (parameter, i) => (
+                    <ParameterRow
+                      fn={ fn }
+                      specPath={specPath.push(i.toString())}
                       getComponent={ getComponent }
-                      param={ parameter }
-                      key={ parameter.get( "name" ) }
+                      getConfigs={ getConfigs }
+                      rawParam={ parameter }
+                      param={ specSelectors.parameterWithMetaByIdentity(pathMethod, parameter) }
+                      key={ `${parameter.get( "in" )}.${parameter.get("name")}` }
                       onChange={ this.onChange }
                       onChangeConsumes={this.onChangeConsumesWrapper}
                       specSelectors={ specSelectors }

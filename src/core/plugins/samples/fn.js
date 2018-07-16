@@ -1,4 +1,4 @@
-import { objectify, isFunc, normalizeArray } from "core/utils"
+import { objectify, isFunc, normalizeArray, deeplyStripKey } from "core/utils"
 import XML from "xml"
 import memoizee from "memoizee"
 
@@ -9,7 +9,7 @@ const primitives = {
   "number": () => 0,
   "number_float": () => 0.0,
   "integer": () => 0,
-  "boolean": () => true
+  "boolean": (schema) => typeof schema.default === "boolean" ? schema.default : true
 }
 
 const primitive = (schema) => {
@@ -27,10 +27,16 @@ const primitive = (schema) => {
 
 export const sampleFromSchema = (schema, config={}) => {
   let { type, example, properties, additionalProperties, items } = objectify(schema)
-  let { includeReadOnly } = config
+  let { includeReadOnly, includeWriteOnly } = config
 
-  if(example !== undefined)
-    return example
+
+  if(example !== undefined) {
+    return deeplyStripKey(example, "$$ref", (val) => {
+      // do a couple of quick sanity tests to ensure the value
+      // looks like a $$ref that swagger-client generates.
+      return typeof val === "string" && val.indexOf("#") > -1
+    })
+  }
 
   if(!type) {
     if(properties) {
@@ -46,16 +52,20 @@ export const sampleFromSchema = (schema, config={}) => {
     let props = objectify(properties)
     let obj = {}
     for (var name in props) {
-      if ( !props[name].readOnly || includeReadOnly ) {
-        obj[name] = sampleFromSchema(props[name], { includeReadOnly: includeReadOnly })
+      if ( props[name] && props[name].readOnly && !includeReadOnly ) {
+        continue
       }
+      if ( props[name] && props[name].writeOnly && !includeWriteOnly ) {
+        continue
+      }
+      obj[name] = sampleFromSchema(props[name], config)
     }
 
     if ( additionalProperties === true ) {
       obj.additionalProp1 = {}
     } else if ( additionalProperties ) {
       let additionalProps = objectify(additionalProperties)
-      let additionalPropVal = sampleFromSchema(additionalProps, { includeReadOnly: includeReadOnly })
+      let additionalPropVal = sampleFromSchema(additionalProps, config)
 
       for (let i = 1; i < 4; i++) {
         obj["additionalProp" + i] = additionalPropVal
@@ -65,13 +75,25 @@ export const sampleFromSchema = (schema, config={}) => {
   }
 
   if(type === "array") {
-    return [ sampleFromSchema(items, { includeReadOnly: includeReadOnly }) ]
+    if(Array.isArray(items.anyOf)) {
+      return items.anyOf.map(i => sampleFromSchema(i, config))
+    }
+
+    if(Array.isArray(items.oneOf)) {
+      return items.oneOf.map(i => sampleFromSchema(i, config))
+    }
+
+    return [ sampleFromSchema(items, config) ]
   }
 
   if(schema["enum"]) {
     if(schema["default"])
       return schema["default"]
     return normalizeArray(schema["enum"])[0]
+  }
+
+  if (type === "file") {
+    return
   }
 
   return primitive(schema)
@@ -92,7 +114,7 @@ export const inferSchema = (thing) => {
 export const sampleXmlFromSchema = (schema, config={}) => {
   let objectifySchema = objectify(schema)
   let { type, properties, additionalProperties, items, example } = objectifySchema
-  let { includeReadOnly } = config
+  let { includeReadOnly, includeWriteOnly } = config
   let defaultValue = objectifySchema.default
   let res = {}
   let _attr = {}
@@ -173,27 +195,37 @@ export const sampleXmlFromSchema = (schema, config={}) => {
     example = example || {}
 
     for (let propName in props) {
-      if ( !props[propName].readOnly || includeReadOnly ) {
-        props[propName].xml = props[propName].xml || {}
+      if (!props.hasOwnProperty(propName)) {
+        continue
+      }
+      if ( props[propName].readOnly && !includeReadOnly ) {
+        continue
+      }
+      if ( props[propName].writeOnly && !includeWriteOnly ) {
+        continue
+      }
 
-        if (props[propName].xml.attribute) {
-          let enumAttrVal = Array.isArray(props[propName].enum) && props[propName].enum[0]
-          let attrExample = props[propName].example
-          let attrDefault = props[propName].default
-          _attr[props[propName].xml.name || propName] = attrExample!== undefined && attrExample
-            || example[propName] !== undefined && example[propName] || attrDefault !== undefined && attrDefault
-            || enumAttrVal || primitive(props[propName])
-        } else {
-          props[propName].xml.name = props[propName].xml.name || propName
-          props[propName].example = props[propName].example !== undefined ? props[propName].example : example[propName]
-          let t = sampleXmlFromSchema(props[propName])
-          if (Array.isArray(t)) {
-            res[displayName] = res[displayName].concat(t)
-          } else {
-            res[displayName].push(t)
-          }
+      props[propName].xml = props[propName].xml || {}
 
+      if (props[propName].xml.attribute) {
+        let enumAttrVal = Array.isArray(props[propName].enum) && props[propName].enum[0]
+        let attrExample = props[propName].example
+        let attrDefault = props[propName].default
+        _attr[props[propName].xml.name || propName] = attrExample!== undefined && attrExample
+          || example[propName] !== undefined && example[propName] || attrDefault !== undefined && attrDefault
+          || enumAttrVal || primitive(props[propName])
+      } else {
+        props[propName].xml.name = props[propName].xml.name || propName
+        if(props[propName].example === undefined && example[propName] !== undefined) {
+          props[propName].example = example[propName]
         }
+        let t = sampleXmlFromSchema(props[propName])
+        if (Array.isArray(t)) {
+          res[displayName] = res[displayName].concat(t)
+        } else {
+          res[displayName].push(t)
+        }
+
       }
     }
 

@@ -10,12 +10,19 @@ import auth from "core/plugins/auth"
 import util from "core/plugins/util"
 import SplitPaneModePlugin from "core/plugins/split-pane-mode"
 import downloadUrlPlugin from "core/plugins/download-url"
+import configsPlugin from "core/plugins/configs"
+import deepLinkingPlugin from "core/plugins/deep-linking"
+import filter from "core/plugins/filter"
+import onComplete from "core/plugins/on-complete"
+
+import OperationContainer from "core/containers/OperationContainer"
 
 import App from "core/components/app"
 import AuthorizationPopup from "core/components/auth/authorization-popup"
 import AuthorizeBtn from "core/components/auth/authorize-btn"
 import AuthorizeOperationBtn from "core/components/auth/authorize-operation-btn"
 import Auths from "core/components/auth/auths"
+import AuthItem from "core/components/auth/auth-item"
 import AuthError from "core/components/auth/error"
 import ApiKeyAuth from "core/components/auth/api-key-auth"
 import BasicAuth from "core/components/auth/basic-auth"
@@ -24,27 +31,48 @@ import Clear from "core/components/clear"
 import LiveResponse from "core/components/live-response"
 import OnlineValidatorBadge from "core/components/online-validator-badge"
 import Operations from "core/components/operations"
+import OperationTag from "core/components/operation-tag"
 import Operation from "core/components/operation"
+import OperationExt from "core/components/operation-extensions"
+import OperationExtRow from "core/components/operation-extension-row"
 import HighlightCode from "core/components/highlight-code"
 import Responses from "core/components/responses"
 import Response from "core/components/response"
 import ResponseBody from "core/components/response-body"
 import Parameters from "core/components/parameters"
+import ParameterExt from "core/components/parameter-extension"
 import ParameterRow from "core/components/parameter-row"
 import Execute from "core/components/execute"
 import Headers from "core/components/headers"
 import Errors from "core/components/errors"
 import ContentType from "core/components/content-type"
 import Overview from "core/components/overview"
-import Info from "core/components/info"
+import Info, {
+  InfoUrl,
+  InfoBasePath
+} from "core/components/info"
+import InfoContainer from "core/containers/info"
 import Footer from "core/components/footer"
+import FilterContainer from "core/containers/filter"
 import ParamBody from "core/components/param-body"
 import Curl from "core/components/curl"
 import Schemes from "core/components/schemes"
+import SchemesContainer from "core/containers/schemes"
+import ModelCollapse from "core/components/model-collapse"
 import ModelExample from "core/components/model-example"
+import ModelWrapper from "core/components/model-wrapper"
 import Model from "core/components/model"
 import Models from "core/components/models"
+import EnumModel from "core/components/enum-model"
+import ObjectModel from "core/components/object-model"
+import ArrayModel from "core/components/array-model"
+import PrimitiveModel from "core/components/primitive-model"
+import Property from "core/components/property"
 import TryItOutButton from "core/components/try-it-out-button"
+import VersionPragmaFilter from "core/components/version-pragma-filter"
+import VersionStamp from "core/components/version-stamp"
+import DeepLink from "core/components/deep-link"
+import SvgAssets from "core/components/svg-assets"
 
 import Markdown from "core/components/providers/markdown"
 
@@ -62,6 +90,7 @@ export default function() {
       authorizeBtn: AuthorizeBtn,
       authorizeOperationBtn: AuthorizeOperationBtn,
       auths: Auths,
+      AuthItem: AuthItem,
       authError: AuthError,
       oauth2: Oauth2,
       apiKeyAuth: ApiKeyAuth,
@@ -69,6 +98,7 @@ export default function() {
       clear: Clear,
       liveResponse: LiveResponse,
       info: Info,
+      InfoContainer,
       onlineValidatorBadge: OnlineValidatorBadge,
       operations: Operations,
       operation: Operation,
@@ -84,15 +114,35 @@ export default function() {
       contentType: ContentType,
       overview: Overview,
       footer: Footer,
+      FilterContainer,
       ParamBody: ParamBody,
       curl: Curl,
       schemes: Schemes,
+      SchemesContainer,
       modelExample: ModelExample,
-      model: Model,
-      models: Models,
+      ModelWrapper,
+      ModelCollapse,
+      Model,
+      Models,
+      EnumModel,
+      ObjectModel,
+      ArrayModel,
+      PrimitiveModel,
+      Property,
       TryItOutButton,
       Markdown,
-      BaseLayout
+      BaseLayout,
+      VersionPragmaFilter,
+      VersionStamp,
+      OperationExt,
+      OperationExtRow,
+      ParameterExt,
+      OperationTag,
+      OperationContainer,
+      DeepLink,
+      InfoUrl,
+      InfoBasePath,
+      SvgAssets
     }
   }
 
@@ -105,6 +155,7 @@ export default function() {
   }
 
   return [
+    configsPlugin,
     util,
     logs,
     view,
@@ -119,6 +170,9 @@ export default function() {
     auth,
     ast,
     SplitPaneModePlugin,
-    downloadUrlPlugin
+    downloadUrlPlugin,
+    deepLinkingPlugin,
+    filter,
+    onComplete
   ]
 }

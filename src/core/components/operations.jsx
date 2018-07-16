@@ -1,109 +1,107 @@
-import React, { PropTypes } from "react"
+import React from "react"
+import PropTypes from "prop-types"
+import Im from "immutable"
+
+const SWAGGER2_OPERATION_METHODS = [
+  "get", "put", "post", "delete", "options", "head", "patch"
+]
+
+const OAS3_OPERATION_METHODS = SWAGGER2_OPERATION_METHODS.concat(["trace"])
+
 
 export default class Operations extends React.Component {
 
   static propTypes = {
     specSelectors: PropTypes.object.isRequired,
     specActions: PropTypes.object.isRequired,
+    oas3Actions: PropTypes.object.isRequired,
     getComponent: PropTypes.func.isRequired,
     layoutSelectors: PropTypes.object.isRequired,
     layoutActions: PropTypes.object.isRequired,
     authActions: PropTypes.object.isRequired,
     authSelectors: PropTypes.object.isRequired,
-  };
-
-  static defaultProps = {
-
+    getConfigs: PropTypes.func.isRequired,
+    fn: PropTypes.func.isRequired
   };
 
   render() {
     let {
       specSelectors,
-      specActions,
       getComponent,
       layoutSelectors,
       layoutActions,
-      authActions,
-      authSelectors,
+      getConfigs,
       fn
     } = this.props
 
     let taggedOps = specSelectors.taggedOperations()
 
-    const Operation = getComponent("operation")
-    const Collapse = getComponent("Collapse")
+    const OperationContainer = getComponent("OperationContainer", true)
+    const OperationTag = getComponent("OperationTag")
 
-    let showSummary = layoutSelectors.showSummary()
+    let {
+      maxDisplayedTags,
+    } = getConfigs()
+
+    let filter = layoutSelectors.currentFilter()
+
+    if (filter) {
+      if (filter !== true) {
+        taggedOps = fn.opsFilter(taggedOps, filter)
+      }
+    }
+
+    if (maxDisplayedTags && !isNaN(maxDisplayedTags) && maxDisplayedTags >= 0) {
+      taggedOps = taggedOps.slice(0, maxDisplayedTags)
+    }
 
     return (
         <div>
           {
             taggedOps.map( (tagObj, tag) => {
-              let operations = tagObj.get("operations")
-              let tagDescription = tagObj.getIn(["tagDetails", "description"], null)
-
-              let isShownKey = ["operations-tag", tag]
-              let showTag = layoutSelectors.isShown(isShownKey, true)
-
+              const operations = tagObj.get("operations")
               return (
-                <div className={showTag ? "opblock-tag-section is-open" : "opblock-tag-section"} key={"operation-" + tag}>
+                <OperationTag
+                  key={"operation-" + tag}
+                  tagObj={tagObj}
+                  tag={tag}
+                  layoutSelectors={layoutSelectors}
+                  layoutActions={layoutActions}
+                  getConfigs={getConfigs}
+                  getComponent={getComponent}>
+                  {
+                    operations.map( op => {
+                      const path = op.get("path")
+                      const method = op.get("method")
+                      const specPath = Im.List(["paths", path, method])
 
-                  <h4 onClick={() => layoutActions.show(isShownKey, !showTag)} className={!tagDescription ? "opblock-tag no-desc" : "opblock-tag" }>
-                    <span>{tag}</span>
-                    { !tagDescription ? null :
-                        <small>
-                          { tagDescription }
-                        </small>
-                    }
 
-                    <button className="expand-operation" title="Expand operation" onClick={() => layoutActions.show(isShownKey, !showTag)}>
-                      <svg className="arrow" width="20" height="20">
-                        <use xlinkHref={showTag ? "#large-arrow-down" : "#large-arrow"} />
-                      </svg>
-                    </button>
-                  </h4>
+                      // FIXME: (someday) this logic should probably be in a selector,
+                      // but doing so would require further opening up
+                      // selectors to the plugin system, to allow for dynamic
+                      // overriding of low-level selectors that other selectors
+                      // rely on. --KS, 12/17
+                      const validMethods = specSelectors.isOAS3() ?
+                            OAS3_OPERATION_METHODS : SWAGGER2_OPERATION_METHODS
 
-                  <Collapse isOpened={showTag}>
-                    {
-                      operations.map( op => {
+                      if(validMethods.indexOf(method) === -1) {
+                        return null
+                      }
 
-                        const isShownKey = ["operations", op.get("id"), tag]
-                        const path = op.get("path", "")
-                        const method = op.get("method", "")
-                        const jumpToKey = `paths.${path}.${method}`
+                      return <OperationContainer
+                                 key={`${path}-${method}`}
+                                 specPath={specPath}
+                                 op={op}
+                                 path={path}
+                                 method={method}
+                                 tag={tag}
+                                 />
+                    }).toArray()
+                  }
 
-                        const allowTryItOut = specSelectors.allowTryItOutFor(op.get("path"), op.get("method"))
-                        const response = specSelectors.responseFor(op.get("path"), op.get("method"))
-                        const request = specSelectors.requestFor(op.get("path"), op.get("method"))
 
-                        return <Operation
-                          {...op.toObject()}
-
-                          isShownKey={isShownKey}
-                          jumpToKey={jumpToKey}
-                          showSummary={showSummary}
-                          key={isShownKey}
-                          response={ response }
-                          request={ request }
-                          allowTryItOut={allowTryItOut}
-
-                          specActions={ specActions }
-                          specSelectors={ specSelectors }
-
-                          layoutActions={ layoutActions }
-                          layoutSelectors={ layoutSelectors }
-
-                          authActions={ authActions }
-                          authSelectors={ authSelectors }
-
-                          getComponent={ getComponent }
-                          fn={fn}
-                        />
-                      }).toArray()
-                    }
-                  </Collapse>
-                </div>
-                )
+                </OperationTag>
+              )
             }).toArray()
           }
 

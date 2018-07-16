@@ -1,20 +1,27 @@
-import { fromJS } from "immutable"
+import { fromJS, List } from "immutable"
 import { fromJSOrdered, validateParam } from "core/utils"
 import win from "../../window"
 
+// selector-in-reducer is suboptimal, but `operationWithMeta` is more of a helper
 import {
-	UPDATE_SPEC,
+  operationWithMeta
+} from "./selectors"
+
+import {
+  UPDATE_SPEC,
   UPDATE_URL,
   UPDATE_JSON,
   UPDATE_PARAM,
   VALIDATE_PARAMS,
   SET_RESPONSE,
   SET_REQUEST,
+  SET_MUTATED_REQUEST,
   UPDATE_RESOLVED,
-  UPDATE_OPERATION_VALUE,
+  UPDATE_RESOLVED_SUBTREE,
+  UPDATE_OPERATION_META_VALUE,
   CLEAR_RESPONSE,
   CLEAR_REQUEST,
-  ClEAR_VALIDATE_PARAMS,
+  CLEAR_VALIDATE_PARAMS,
   SET_SCHEME
 } from "./actions"
 
@@ -38,44 +45,59 @@ export default {
     return state.setIn(["resolved"], fromJSOrdered(action.payload))
   },
 
+  [UPDATE_RESOLVED_SUBTREE]: (state, action) => {
+    const { value, path } = action.payload
+    return state.setIn(["resolvedSubtrees", ...path], fromJSOrdered(value))
+  },
+
   [UPDATE_PARAM]: ( state, {payload} ) => {
-    let { path, paramName, value, isXml } = payload
-    return state.updateIn( [ "resolved", "paths", ...path, "parameters" ], fromJS([]), parameters => {
-      let index = parameters.findIndex( p => p.get( "name" ) === paramName )
-      if (!(value instanceof win.File)) {
-        value = fromJSOrdered( value )
-      }
-      return parameters.setIn( [ index, isXml ? "value_xml" : "value" ], value)
-    })
+    let { path: pathMethod, paramName, paramIn, param, value, isXml } = payload
+
+    let paramKey
+
+    // `hashCode` is an Immutable.js Map method
+    if(param && param.hashCode && !paramIn && !paramName) {
+      paramKey = `${param.get("name")}.${param.get("in")}.hash-${param.hashCode()}`
+    } else {
+      paramKey = `${paramName}.${paramIn}`
+    }
+
+    const valueKey = isXml ? "value_xml" : "value"
+
+    return state.setIn(
+      ["meta", "paths", ...pathMethod, "parameters", paramKey, valueKey],
+      value
+    )
   },
 
-  [VALIDATE_PARAMS]: ( state, { payload:  { pathMethod } } ) => {
-    let operation = state.getIn( [ "resolved", "paths", ...pathMethod ] )
-    let isXml = /xml/i.test(operation.get("consumes_value"))
+  [VALIDATE_PARAMS]: ( state, { payload: { pathMethod, isOAS3 } } ) => {
+    let meta = state.getIn( [ "meta", "paths", ...pathMethod ], fromJS({}) )
+    let isXml = /xml/i.test(meta.get("consumes_value"))
 
-    return state.updateIn( [ "resolved", "paths", ...pathMethod, "parameters" ], fromJS([]), parameters => {
-      return parameters.withMutations( parameters => {
-        for ( let i = 0, len = parameters.count(); i < len; i++ ) {
-          let errors = validateParam(parameters.get(i), isXml)
-          parameters.setIn([i, "errors"], fromJS(errors))
-        }
-      })
+    const op = operationWithMeta(state, ...pathMethod)
+
+    return state.updateIn(["meta", "paths", ...pathMethod, "parameters"], fromJS({}), paramMeta => {
+      return op.get("parameters", List()).reduce((res, param) => {
+        const errors = validateParam(param, isXml, isOAS3)
+        return res.setIn([`${param.get("name")}.${param.get("in")}`, "errors"], fromJS(errors))
+      }, paramMeta)
     })
   },
-  [ClEAR_VALIDATE_PARAMS]: ( state, { payload:  { pathMethod } } ) => {
-    return state.updateIn( [ "resolved", "paths", ...pathMethod, "parameters" ], fromJS([]), parameters => {
-      return parameters.withMutations( parameters => {
-        for ( let i = 0, len = parameters.count(); i < len; i++ ) {
-          parameters.setIn([i, "errors"], fromJS({}))
-        }
-      })
+  [CLEAR_VALIDATE_PARAMS]: ( state, { payload:  { pathMethod } } ) => {
+    return state.updateIn( [ "meta", "paths", ...pathMethod, "parameters" ], fromJS([]), parameters => {
+      return parameters.map(param => param.set("errors", fromJS([])))
     })
   },
 
   [SET_RESPONSE]: (state, { payload: { res, path, method } } ) =>{
     let result
     if ( res.error ) {
-      result = Object.assign({error: true}, res.err)
+      result = Object.assign({
+        error: true,
+        name: res.err.name,
+        message: res.err.message,
+        statusCode: res.err.statusCode
+      }, res.err.response)
     } else {
       result = res
     }
@@ -86,7 +108,7 @@ export default {
     let newState = state.setIn( [ "responses", path, method ], fromJSOrdered(result) )
 
     // ImmutableJS messes up Blob. Needs to reset its value.
-    if (res.data instanceof win.Blob) {
+    if (win.Blob && res.data instanceof win.Blob) {
       newState = newState.setIn( [ "responses", path, method, "text" ], res.data)
     }
     return newState
@@ -96,12 +118,25 @@ export default {
     return state.setIn( [ "requests", path, method ], fromJSOrdered(req))
   },
 
-  [UPDATE_OPERATION_VALUE]: (state, { payload: { path, value, key } }) => {
-    let operationPath = ["resolved", "paths", ...path]
-    if(!state.getIn(operationPath)) {
+  [SET_MUTATED_REQUEST]: (state, { payload: { req, path, method } } ) =>{
+    return state.setIn( [ "mutatedRequests", path, method ], fromJSOrdered(req))
+  },
+
+  [UPDATE_OPERATION_META_VALUE]: (state, { payload: { path, value, key } }) => {
+    // path is a pathMethod tuple... can't change the name now.
+    let operationPath = ["paths", ...path]
+    let metaPath = ["meta", "paths", ...path]
+
+    if(
+      !state.getIn(["json", ...operationPath])
+      && !state.getIn(["resolved", ...operationPath])
+      && !state.getIn(["resolvedSubtrees", ...operationPath])
+    ) {
+      // do nothing if the operation does not exist
       return state
     }
-    return state.setIn([...operationPath, key], fromJS(value))
+
+    return state.setIn([...metaPath, key], fromJS(value))
   },
 
   [CLEAR_RESPONSE]: (state, { payload: { path, method } } ) =>{
