@@ -2,7 +2,8 @@ import React from "react"
 import PropTypes from "prop-types"
 import ImPropTypes from "react-immutable-proptypes"
 import Im from "immutable"
-import { createDeepLinkPath, sanitizeUrl } from "core/utils"
+import { createDeepLinkPath, escapeDeepLinkPath, sanitizeUrl } from "core/utils"
+import { buildUrl } from "core/utils/url"
 
 export default class OperationTag extends React.Component {
 
@@ -15,11 +16,14 @@ export default class OperationTag extends React.Component {
     tagObj: ImPropTypes.map.isRequired,
     tag: PropTypes.string.isRequired,
 
+    oas3Selectors: PropTypes.func.isRequired,
     layoutSelectors: PropTypes.object.isRequired,
     layoutActions: PropTypes.object.isRequired,
 
     getConfigs: PropTypes.func.isRequired,
     getComponent: PropTypes.func.isRequired,
+
+    specUrl: PropTypes.string.isRequired,
 
     children: PropTypes.element,
   }
@@ -29,11 +33,12 @@ export default class OperationTag extends React.Component {
       tagObj,
       tag,
       children,
-
+      oas3Selectors,
       layoutSelectors,
       layoutActions,
       getConfigs,
       getComponent,
+      specUrl,
     } = this.props
 
     let {
@@ -44,14 +49,16 @@ export default class OperationTag extends React.Component {
     const isDeepLinkingEnabled = deepLinking && deepLinking !== "false"
 
     const Collapse = getComponent("Collapse")
-    const Markdown = getComponent("Markdown")
+    const Markdown = getComponent("Markdown", true)
     const DeepLink = getComponent("DeepLink")
+    const Link = getComponent("Link")
 
     let tagDescription = tagObj.getIn(["tagDetails", "description"], null)
     let tagExternalDocsDescription = tagObj.getIn(["tagDetails", "externalDocs", "description"])
-    let tagExternalDocsUrl = tagObj.getIn(["tagDetails", "externalDocs", "url"])
+    let rawTagExternalDocsUrl = tagObj.getIn(["tagDetails", "externalDocs", "url"])    
+    let tagExternalDocsUrl = buildUrl( rawTagExternalDocsUrl, specUrl, {selectedServer: oas3Selectors.selectedServer()} )
 
-    let isShownKey = ["operations-tag", createDeepLinkPath(tag)]
+    let isShownKey = ["operations-tag", tag]
     let showTag = layoutSelectors.isShown(isShownKey, docExpansion === "full" || docExpansion === "list")
 
     return (
@@ -60,11 +67,14 @@ export default class OperationTag extends React.Component {
         <h4
           onClick={() => layoutActions.show(isShownKey, !showTag)}
           className={!tagDescription ? "opblock-tag no-desc" : "opblock-tag" }
-          id={isShownKey.join("-")}>
+          id={isShownKey.map(v => escapeDeepLinkPath(v)).join("-")}
+          data-tag={tag}
+          data-is-open={showTag}
+          >
           <DeepLink
             enabled={isDeepLinkingEnabled}
             isShown={showTag}
-            path={tag}
+            path={createDeepLinkPath(tag)}
             text={tag} />
           { !tagDescription ? <small></small> :
             <small>
@@ -78,11 +88,11 @@ export default class OperationTag extends React.Component {
                     { tagExternalDocsDescription }
                       { tagExternalDocsUrl ? ": " : null }
                       { tagExternalDocsUrl ?
-                        <a
+                        <Link
                             href={sanitizeUrl(tagExternalDocsUrl)}
                             onClick={(e) => e.stopPropagation()}
-                            target={"_blank"}
-                            >{tagExternalDocsUrl}</a> : null
+                            target="_blank"
+                            >{tagExternalDocsUrl}</Link> : null
                           }
                   </small>
                 }

@@ -1,5 +1,4 @@
 ---
 url: "orchid_swagger.yaml"
 dom_id: "#swagger-ui"
-validatorUrl: "https://online.swagger.io/validator"
-oauth2RedirectUrl: "http://localhost:3200/oauth2-redirect.html"
+validatorUrl: "https://validator.swagger.io/validator"
