@@ -1,30 +1,19 @@
 import reduce from "lodash/reduce"
-let request = require.context("./transformers/", true, /\.js$/)
-let errorTransformers = []
+import * as NotOfType from "./transformers/not-of-type"
+import * as ParameterOneOf from "./transformers/parameter-oneof"
 
-request.keys().forEach( function( key ){
-  if( key === "./hook.js" ) {
-    return
-  }
+const errorTransformers = [
+  NotOfType,
+  ParameterOneOf
+]
 
-  if( !key.match(/js$/) ) {
-    return
-  }
-
-  if( key.slice(2).indexOf("/") > -1) {
-    // skip files in subdirs
-    return
-  }
-
-  errorTransformers.push({
-    name: toTitleCase(key).replace(".js", "").replace("./", ""),
-    transform: request(key).transform
-  })
-})
-
-export default function transformErrors (errors, system) {
+export default function transformErrors (errors) {
+  // Dev note: unimplemented artifact where
+  // jsSpec: system.specSelectors.specJson().toJS()
+  // regardless, to be compliant with redux@4, instead of calling the store method here,
+  // jsSpec should be pass down as an argument,
   let inputs = {
-    jsSpec: system.specSelectors.specJson().toJS()
+    jsSpec: {}
   }
 
   let transformedErrors = reduce(errorTransformers, (result, transformer) => {
@@ -46,11 +35,4 @@ export default function transformErrors (errors, system) {
       return err
     })
 
-}
-
-function toTitleCase(str) {
-  return str
-    .split("-")
-    .map(substr => substr[0].toUpperCase() + substr.slice(1))
-    .join("")
 }

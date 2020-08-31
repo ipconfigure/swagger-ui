@@ -37,7 +37,7 @@ export default class Schemes extends React.Component {
   }
 
   render() {
-    let { schemes } = this.props
+    let { schemes, currentScheme } = this.props
 
     return <div></div>
   }

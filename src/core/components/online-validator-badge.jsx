@@ -1,5 +1,9 @@
 import React from "react"
+import URL from "url-parse"
+
 import PropTypes from "prop-types"
+import { sanitizeUrl, requiresValidationURL } from "core/utils"
+import win from "core/window"
 
 export default class OnlineValidatorBadge extends React.Component {
     static propTypes = {
@@ -10,21 +14,29 @@ export default class OnlineValidatorBadge extends React.Component {
 
     constructor(props, context) {
         super(props, context)
-        let { specSelectors, getConfigs } = props
+        let { getConfigs } = props
         let { validatorUrl } = getConfigs()
         this.state = {
-            url: specSelectors.url(),
-            validatorUrl: validatorUrl === undefined ? "https://online.swagger.io/validator" : validatorUrl
+            url: this.getDefinitionUrl(),
+            validatorUrl: validatorUrl === undefined ? "https://validator.swagger.io/validator" : validatorUrl
         }
     }
 
+    getDefinitionUrl = () => {
+      // TODO: test this behavior by stubbing `window.location` in an Enzyme/JSDom env
+      let { specSelectors } = this.props
+
+      const urlObject = new URL(specSelectors.url(), win.location)
+      return urlObject.toString()
+    }
+
     componentWillReceiveProps(nextProps) {
-        let { specSelectors, getConfigs } = nextProps
+        let { getConfigs } = nextProps
         let { validatorUrl } = getConfigs()
 
         this.setState({
-            url: specSelectors.url(),
-            validatorUrl: validatorUrl === undefined ? "https://online.swagger.io/validator" : validatorUrl
+            url: this.getDefinitionUrl(),
+            validatorUrl: validatorUrl === undefined ? "https://validator.swagger.io/validator" : validatorUrl
         })
     }
 
@@ -32,16 +44,18 @@ export default class OnlineValidatorBadge extends React.Component {
         let { getConfigs } = this.props
         let { spec } = getConfigs()
 
+        let sanitizedValidatorUrl = sanitizeUrl(this.state.validatorUrl)
+
         if ( typeof spec === "object" && Object.keys(spec).length) return null
 
-        if (!this.state.url || !this.state.validatorUrl || this.state.url.indexOf("localhost") >= 0
-                            || this.state.url.indexOf("127.0.0.1") >= 0) {
+        if (!this.state.url || !requiresValidationURL(this.state.validatorUrl)
+                            || !requiresValidationURL(this.state.url)) {
           return null
         }
 
-        return (<span style={{ float: "right"}}>
-                <a target="_blank" href={`${ this.state.validatorUrl }/debug?url=${ this.state.url }`}>
-                    <ValidatorImage src={`${ this.state.validatorUrl }?url=${ this.state.url }`} alt="Online validator badge"/>
+        return (<span className="float-right">
+                <a target="_blank" rel="noopener noreferrer" href={`${ sanitizedValidatorUrl }/debug?url=${ encodeURIComponent(this.state.url) }`}>
+                    <ValidatorImage src={`${ sanitizedValidatorUrl }?url=${ encodeURIComponent(this.state.url) }`} alt="Online validator badge"/>
                 </a>
             </span>)
     }

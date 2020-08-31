@@ -1,10 +1,13 @@
 import { createSelector } from "reselect"
 import { sorters } from "core/utils"
 import { fromJS, Set, Map, OrderedMap, List } from "immutable"
+import { paramToIdentifier } from "../../utils"
 
 const DEFAULT_TAG = "default"
 
-const OPERATION_METHODS = ["get", "put", "post", "delete", "options", "head", "patch"]
+const OPERATION_METHODS = [
+  "get", "put", "post", "delete", "options", "head", "patch", "trace"
+]
 
 const state = state => {
   return state || Map()
@@ -40,9 +43,40 @@ export const specResolved = createSelector(
   spec => spec.get("resolved", Map())
 )
 
+export const specResolvedSubtree = (state, path) => {
+  return state.getIn(["resolvedSubtrees", ...path], undefined)
+}
+
+const mergerFn = (oldVal, newVal) => {
+  if(Map.isMap(oldVal) && Map.isMap(newVal)) {
+    if(newVal.get("$$ref")) {
+      // resolver artifacts indicated that this key was directly resolved
+      // so we should drop the old value entirely
+      return newVal
+    }
+
+    return OrderedMap().mergeWith(
+      mergerFn,
+      oldVal,
+      newVal
+    )
+  }
+
+  return newVal
+}
+
+export const specJsonWithResolvedSubtrees = createSelector(
+  state,
+  spec => OrderedMap().mergeWith(
+    mergerFn,
+    spec.get("json"),
+    spec.get("resolvedSubtrees")
+  )
+)
+
 // Default Spec ( as an object )
 export const spec = state => {
-  let res = specResolved(state)
+  let res = specJson(state)
   return res
 }
 
@@ -76,7 +110,7 @@ export const semver = createSelector(
 )
 
 export const paths = createSelector(
-	spec,
+	specJsonWithResolvedSubtrees,
 	spec => spec.get("paths")
 )
 
@@ -97,7 +131,7 @@ export const operations = createSelector(
         return {}
       }
       path.forEach((operation, method) => {
-        if(OPERATION_METHODS.indexOf(method) === -1) {
+        if(OPERATION_METHODS.indexOf(method) < 0) {
           return
         }
         list = list.push(fromJS({
@@ -135,12 +169,17 @@ export const securityDefinitions = createSelector(
 
 
 export const findDefinition = ( state, name ) => {
-  return specResolved(state).getIn(["definitions", name], null)
+  const resolvedRes = state.getIn(["resolvedSubtrees", "definitions", name], null)
+  const unresolvedRes = state.getIn(["json", "definitions", name], null)
+  return resolvedRes || unresolvedRes || null
 }
 
 export const definitions = createSelector(
   spec,
-  spec => spec.get("definitions") || Map()
+  spec => {
+    const res = spec.get("definitions")
+    return Map.isMap(res) ? res : Map()
+  }
 )
 
 export const basePath = createSelector(
@@ -186,7 +225,10 @@ export const operationsWithRootInherited = createSelector(
 
 export const tags = createSelector(
   spec,
-  json => json.get("tags", List())
+  json => {
+    const tags = json.get("tags", List())
+    return List.isList(tags) ? tags.filter(tag => Map.isMap(tag)) : List()
+  }
 )
 
 export const tagDetails = (state, tag) => {
@@ -259,12 +301,54 @@ export const allowTryItOutFor = () => {
   return true
 }
 
+export const parameterWithMetaByIdentity = (state, pathMethod, param) => {
+  const opParams = specJsonWithResolvedSubtrees(state).getIn(["paths", ...pathMethod, "parameters"], OrderedMap())
+  const metaParams = state.getIn(["meta", "paths", ...pathMethod, "parameters"], OrderedMap())
+
+  const mergedParams = opParams.map((currentParam) => {
+    const inNameKeyedMeta = metaParams.get(`${param.get("in")}.${param.get("name")}`)
+    const hashKeyedMeta = metaParams.get(`${param.get("in")}.${param.get("name")}.hash-${param.hashCode()}`)
+    return OrderedMap().merge(
+      currentParam,
+      inNameKeyedMeta,
+      hashKeyedMeta
+    )
+  })
+  return mergedParams.find(curr => curr.get("in") === param.get("in") && curr.get("name") === param.get("name"), OrderedMap())
+}
+
+export const parameterInclusionSettingFor = (state, pathMethod, paramName, paramIn) => {
+  const paramKey = `${paramIn}.${paramName}`
+  return state.getIn(["meta", "paths", ...pathMethod, "parameter_inclusions", paramKey], false)
+}
+
+
+export const parameterWithMeta = (state, pathMethod, paramName, paramIn) => {
+  const opParams = specJsonWithResolvedSubtrees(state).getIn(["paths", ...pathMethod, "parameters"], OrderedMap())
+  const currentParam = opParams.find(param => param.get("in") === paramIn && param.get("name") === paramName, OrderedMap())
+  return parameterWithMetaByIdentity(state, pathMethod, currentParam)
+}
+
+export const operationWithMeta = (state, path, method) => {
+  const op = specJsonWithResolvedSubtrees(state).getIn(["paths", path, method], OrderedMap())
+  const meta = state.getIn(["meta", "paths", path, method], OrderedMap())
+
+  const mergedParams = op.get("parameters", List()).map((param) => {
+    return parameterWithMetaByIdentity(state, [path, method], param)
+  })
+
+  return OrderedMap()
+    .merge(op, meta)
+    .set("parameters", mergedParams)
+}
+
 // Get the parameter value by parameter name
 export function getParameter(state, pathMethod, name, inType) {
-  let params = spec(state).getIn(["paths", ...pathMethod, "parameters"], fromJS([]))
-  return params.filter( (p) => {
+  pathMethod = pathMethod || []
+  let params = state.getIn(["meta", "paths", ...pathMethod, "parameters"], fromJS([]))
+  return params.find( (p) => {
     return Map.isMap(p) && p.get("name") === name && p.get("in") === inType
-  }).first()
+  }) || Map() // Always return a map
 }
 
 export const hasHost = createSelector(
@@ -277,10 +361,11 @@ export const hasHost = createSelector(
 
 // Get the parameter values, that the user filled out
 export function parameterValues(state, pathMethod, isXml) {
-  let params = spec(state).getIn(["paths", ...pathMethod, "parameters"], fromJS([]))
-  return params.reduce( (hash, p) => {
+  pathMethod = pathMethod || []
+  let paramValues = operationWithMeta(state, ...pathMethod).get("parameters", List())
+  return paramValues.reduce( (hash, p) => {
     let value = isXml && p.get("in") === "body" ? p.get("value_xml") : p.get("value")
-    return hash.set(`${p.get("in")}.${p.get("name")}`, value)
+    return hash.set(paramToIdentifier(p, { allowHashes: false }), value)
   }, fromJS({}))
 }
 
@@ -300,11 +385,15 @@ export function parametersIncludeType(parameters, typeValue="") {
 
 // Get the consumes/produces value that the user selected
 export function contentTypeValues(state, pathMethod) {
-  let op = spec(state).getIn(["paths", ...pathMethod], fromJS({}))
+  pathMethod = pathMethod || []
+  let op = specJsonWithResolvedSubtrees(state).getIn(["paths", ...pathMethod], fromJS({}))
+  let meta = state.getIn(["meta", "paths", ...pathMethod], fromJS({}))
+  let producesValue = currentProducesFor(state, pathMethod)
+
   const parameters = op.get("parameters") || new List()
 
   const requestContentType = (
-    op.get("consumes_value") ? op.get("consumes_value")
+    meta.get("consumes_value") ? meta.get("consumes_value")
       : parametersIncludeType(parameters, "file") ? "multipart/form-data"
       : parametersIncludeType(parameters, "formData") ? "application/x-www-form-urlencoded"
       : undefined
@@ -312,13 +401,68 @@ export function contentTypeValues(state, pathMethod) {
 
   return fromJS({
     requestContentType,
-    responseContentType: op.get("produces_value")
+    responseContentType: producesValue
   })
 }
 
-// Get the consumes/produces by path
-export function operationConsumes(state, pathMethod) {
-  return spec(state).getIn(["paths", ...pathMethod, "consumes"], fromJS({}))
+// Get the currently selected produces value for an operation
+export function currentProducesFor(state, pathMethod) {
+  pathMethod = pathMethod || []
+
+  const operation = specJsonWithResolvedSubtrees(state).getIn([ "paths", ...pathMethod], null)
+
+  if(operation === null) {
+    // return nothing if the operation does not exist
+    return
+  }
+
+  const currentProducesValue = state.getIn(["meta", "paths", ...pathMethod, "produces_value"], null)
+  const firstProducesArrayItem = operation.getIn(["produces", 0], null)
+
+  return currentProducesValue || firstProducesArrayItem || "application/json"
+
+}
+
+// Get the produces options for an operation
+export function producesOptionsFor(state, pathMethod) {
+  pathMethod = pathMethod || []
+
+  const spec = specJsonWithResolvedSubtrees(state)
+  const operation = spec.getIn([ "paths", ...pathMethod], null)
+
+  if(operation === null) {
+    // return nothing if the operation does not exist
+    return
+  }
+
+  const [path] = pathMethod
+
+  const operationProduces = operation.get("produces", null)
+  const pathItemProduces = spec.getIn(["paths", path, "produces"], null)
+  const globalProduces = spec.getIn(["produces"], null)
+
+  return operationProduces || pathItemProduces || globalProduces
+}
+
+// Get the consumes options for an operation
+export function consumesOptionsFor(state, pathMethod) {
+  pathMethod = pathMethod || []
+
+  const spec = specJsonWithResolvedSubtrees(state)
+  const operation = spec.getIn(["paths", ...pathMethod], null)
+
+  if (operation === null) {
+    // return nothing if the operation does not exist
+    return
+  }
+
+  const [path] = pathMethod
+
+  const operationConsumes = operation.get("consumes", null)
+  const pathItemConsumes = spec.getIn(["paths", path, "consumes"], null)
+  const globalConsumes = spec.getIn(["consumes"], null)
+
+  return operationConsumes || pathItemConsumes || globalConsumes
 }
 
 export const operationScheme = ( state, path, method ) => {
@@ -334,10 +478,11 @@ export const canExecuteScheme = ( state, path, method ) => {
 }
 
 export const validateBeforeExecute = ( state, pathMethod ) => {
-  let params = spec(state).getIn(["paths", ...pathMethod, "parameters"], fromJS([]))
+  pathMethod = pathMethod || []
+  let paramValues = state.getIn(["meta", "paths", ...pathMethod, "parameters"], fromJS([]))
   let isValid = true
 
-  params.forEach( (p) => {
+  paramValues.forEach( (p) => {
     let errors = p.get("errors")
     if ( errors && errors.count() ) {
       isValid = false
@@ -345,6 +490,28 @@ export const validateBeforeExecute = ( state, pathMethod ) => {
   })
 
   return isValid
+}
+
+export const getOAS3RequiredRequestBodyContentType = (state, pathMethod) => {
+  let requiredObj = {
+    requestBody: false,
+    requestContentType: {}
+  }
+  let requestBody = state.getIn(["resolvedSubtrees", "paths", ...pathMethod, "requestBody"], fromJS([]))
+  if (requestBody.size < 1) {
+    return requiredObj
+  }
+  if (requestBody.getIn(["required"])) {
+    requiredObj.requestBody = requestBody.getIn(["required"])
+  }
+  requestBody.getIn(["content"]).entrySeq().forEach((contentType) => { // e.g application/json
+    const key = contentType[0]
+    if (contentType[1].getIn(["schema", "required"])) {
+      const val = contentType[1].getIn(["schema", "required"]).toJS()
+      requiredObj.requestContentType[key] = val
+    }
+  })
+  return requiredObj
 }
 
 function returnSelfOrNewMap(obj) {
